@@ -172,6 +172,13 @@ function auth(req, res, next) {
   }
 }
 
+function adminOnly(req, res, next) {
+  if (req.admin?.role !== "admin") {
+    return res.status(403).json({ message: "Administrator access is required for this section." });
+  }
+  next();
+}
+
 // -------------------- STOCK VALIDATION --------------------
 
 function stockPayload(body) {
@@ -304,30 +311,21 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
       });
     }
 
-    const admin = await Admin.findOne({ username });
-
-    if (
-      !admin ||
-      !(await bcrypt.compare(password, admin.passwordHash))
-    ) {
-      return res.status(401).json({
-        message: "Incorrect username or password.",
-      });
+    // Fixed read-only staff account requested by the shop owner.
+    // Staff can view stock, but stock mutations and admin sections are role-protected below.
+    let sessionUser;
+    if (username === "member" && password === "member123") {
+      sessionUser = { id: "staff-member", username: "member", role: "staff" };
+    } else {
+      const admin = await Admin.findOne({ username });
+      if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+        return res.status(401).json({ message: "Access denied. Invalid username or password." });
+      }
+      sessionUser = { id: admin._id.toString(), username: admin.username, role: "admin" };
     }
 
-    const token = jwt.sign(
-      {
-        id: admin._id.toString(),
-        username: admin.username,
-      },
-      JWT_SECRET,
-      { expiresIn: "8h" }
-    );
-
-    res.json({
-      token,
-      username: admin.username,
-    });
+    const token = jwt.sign(sessionUser, JWT_SECRET, { expiresIn: "8h" });
+    res.json({ token, username: sessionUser.username, role: sessionUser.role });
   } catch (error) {
     console.error("Login error:", error);
 
@@ -373,7 +371,7 @@ app.get("/api/stock", auth, async (req, res) => {
 
 // -------------------- ADD STOCK --------------------
 
-app.post("/api/stock", auth, async (req, res) => {
+app.post("/api/stock", auth, adminOnly, async (req, res) => {
   try {
     const payload = stockPayload(req.body);
     const item = await Stock.create(payload);
@@ -394,7 +392,7 @@ app.post("/api/stock", auth, async (req, res) => {
 
 // -------------------- UPDATE STOCK --------------------
 
-app.put("/api/stock/:id", auth, async (req, res) => {
+app.put("/api/stock/:id", auth, adminOnly, async (req, res) => {
   try {
     const payload = stockPayload(req.body);
 
@@ -427,7 +425,7 @@ app.put("/api/stock/:id", auth, async (req, res) => {
 
 // -------------------- DELETE STOCK --------------------
 
-app.delete("/api/stock/:id", auth, async (req, res) => {
+app.delete("/api/stock/:id", auth, adminOnly, async (req, res) => {
   try {
     const item = await Stock.findByIdAndDelete(req.params.id);
 
@@ -449,8 +447,52 @@ app.delete("/api/stock/:id", auth, async (req, res) => {
   }
 });
 
+
+// -------------------- ADMIN DASHBOARD ANALYTICS --------------------
+app.get("/api/dashboard", auth, adminOnly, async (_req, res) => {
+  try {
+    const [stock, sales, expenses] = await Promise.all([
+      Stock.find({}).sort({ createdAt: -1 }).lean(),
+      Sale.find({}).sort({ createdAt: -1 }).lean(),
+      Expense.find({}).lean()
+    ]);
+    const byName = new Map(stock.map(item => [item.productName.trim().toLowerCase(), item]));
+    const today = new Date(); today.setHours(0,0,0,0);
+    let revenue = 0, estimatedCost = 0, unitsSoldToday = 0;
+    const movement = new Map();
+    for (const sale of sales) {
+      const amount = Number(sale.amountPaid || 0);
+      revenue += amount;
+      const item = byName.get(String(sale.productName || "").trim().toLowerCase());
+      if (item) estimatedCost += Number(sale.quantity || 0) * Number(item.rate || 0);
+      const units = Number(sale.quantity || 0);
+      const key = String(sale.productName || "Unknown");
+      const prev = movement.get(key) || { productName:key, unitsSold:0, revenue:0 };
+      prev.unitsSold += units; prev.revenue += amount; movement.set(key, prev);
+      if (new Date(sale.createdAt) >= today) unitsSoldToday += units;
+    }
+    const stockCost = stock.reduce((sum,x)=>sum+Number(x.quantity||0)*Number(x.rate||0),0);
+    const stockSelling = stock.reduce((sum,x)=>sum+(x.unit==="kg" ? Number(x.piecesObtained||0) : Number(x.quantity||0))*Number(x.sellingPrice||0),0);
+    const potentialSales = stock.reduce((sum,x)=>sum+(x.unit==="kg" ? Number(x.piecesObtained||0) : Number(x.quantity||0))*Number(x.sellingPrice||0),0);
+    const slowStock = stock.filter(x => Date.now() - new Date(x.createdAt).getTime() > 90*24*60*60*1000 && Number(x.quantity)>0);
+    const scrapTotal = expenses.filter(x=>x.category==="Scrape").reduce((sum,x)=>sum+Number(x.totalAmount||0),0);
+    res.json({
+      revenue:Number(revenue.toFixed(2)), profit:Number((revenue-estimatedCost).toFixed(2)),
+      stockCost:Number(stockCost.toFixed(2)), stockSelling:Number(stockSelling.toFixed(2)),
+      potentialSales:Number(potentialSales.toFixed(2)), lowStockCount:stock.filter(x=>Number(x.quantity)<=5).length,
+      unitsSoldToday:Number(unitsSoldToday.toFixed(3)), averageBill:sales.length?Number((revenue/sales.length).toFixed(2)):0,
+      scrapTotal:Number(scrapTotal.toFixed(2)), productCount:stock.length,
+      fastMoving:[...movement.values()].sort((a,b)=>b.unitsSold-a.unitsSold).slice(0,10),
+      slowStock:slowStock.map(x=>({_id:x._id,productName:x.productName,quantity:x.quantity,unit:x.unit,createdAt:x.createdAt}))
+    });
+  } catch (error) {
+    console.error("Dashboard analytics error:", error);
+    res.status(500).json({message:"Could not load dashboard metrics."});
+  }
+});
+
 // -------------------- SALES API --------------------
-app.get("/api/sales", auth, async (req, res) => {
+app.get("/api/sales", auth, adminOnly, async (req, res) => {
   try {
     const rows = await Sale.find(periodFilter(String(req.query.period || "15days"))).sort({ createdAt: -1 }).lean();
     res.json(rows);
@@ -460,7 +502,7 @@ app.get("/api/sales", auth, async (req, res) => {
   }
 });
 
-app.post("/api/sales", auth, async (req, res) => {
+app.post("/api/sales", auth, adminOnly, async (req, res) => {
   try {
     const productName = String(req.body.productName || "").trim();
     const unit = req.body.unit === "kg" ? "kg" : "pieces";
@@ -480,7 +522,7 @@ app.post("/api/sales", auth, async (req, res) => {
   }
 });
 
-app.delete("/api/sales/:id", auth, async (req, res) => {
+app.delete("/api/sales/:id", auth, adminOnly, async (req, res) => {
   try {
     const sale = await Sale.findByIdAndDelete(req.params.id);
     if (!sale) return res.status(404).json({ message: "Sale record not found." });
@@ -491,7 +533,7 @@ app.delete("/api/sales/:id", auth, async (req, res) => {
 });
 
 // -------------------- EXPENSES API --------------------
-app.get("/api/expenses", auth, async (req, res) => {
+app.get("/api/expenses", auth, adminOnly, async (req, res) => {
   try {
     const rows = await Expense.find(periodFilter(String(req.query.period || "15days"))).sort({ createdAt: -1 }).lean();
     res.json(rows);
@@ -501,7 +543,7 @@ app.get("/api/expenses", auth, async (req, res) => {
   }
 });
 
-app.post("/api/expenses", auth, async (req, res) => {
+app.post("/api/expenses", auth, adminOnly, async (req, res) => {
   try {
     const allowed = ["Shop rent", "Godown rent", "Electricity bill", "Scrape", "Other"];
     const category = String(req.body.category || "");
@@ -536,7 +578,7 @@ app.post("/api/expenses", auth, async (req, res) => {
   }
 });
 
-app.delete("/api/expenses/:id", auth, async (req, res) => {
+app.delete("/api/expenses/:id", auth, adminOnly, async (req, res) => {
   try {
     const expense = await Expense.findByIdAndDelete(req.params.id);
     if (!expense) return res.status(404).json({ message: "Expense record not found." });

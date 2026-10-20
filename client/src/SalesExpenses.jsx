@@ -21,6 +21,7 @@ const dateTime = value => value ? new Date(value).toLocaleString("en-IN", { day:
 export default function SalesExpenses({ mode, token, onToast }) {
   const isSales = mode === "sales";
   const [period, setPeriod] = useState("15days");
+  const [expenseType, setExpenseType] = useState("all");
   const [records, setRecords] = useState([]);
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,11 +46,13 @@ export default function SalesExpenses({ mode, token, onToast }) {
   }, [isSales, period, token]);
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
+  const filteredRecords = !isSales && expenseType !== "all" ? records.filter(row => expenseType === "scrape" ? row.category === "Scrape" : row.category !== "Scrape") : records;
+
   const totals = useMemo(() => {
-    const total = records.reduce((sum, row) => sum + Number(isSales ? row.amountPaid : row.totalAmount), 0);
-    const count = records.length;
+    const total = filteredRecords.reduce((sum, row) => sum + Number(isSales ? row.amountPaid : row.totalAmount), 0);
+    const count = filteredRecords.length;
     return { total, count, average: count ? total / count : 0 };
-  }, [records, isSales]);
+  }, [filteredRecords, isSales]);
 
   const openForm = () => {
     setSaleForm({ ...blankSale, productName: "" });
@@ -109,18 +112,23 @@ export default function SalesExpenses({ mode, token, onToast }) {
           <button className={period === "month" ? "selected" : ""} onClick={() => setPeriod("month")}>This month</button>
           <button className={period === "all" ? "selected" : ""} onClick={() => setPeriod("all")}>All time</button>
         </div>
+        {!isSales && <div className="se-filter se-scrap-filter" aria-label="Filter expenses by type">
+          <button className={expenseType === "all" ? "selected" : ""} onClick={() => setExpenseType("all")}>All expenses</button>
+          <button className={expenseType === "regular" ? "selected" : ""} onClick={() => setExpenseType("regular")}>Regular</button>
+          <button className={expenseType === "scrape" ? "selected" : ""} onClick={() => setExpenseType("scrape")}>Scrap only</button>
+        </div>}
       </div>
       {error && <div className="se-error">{error}<button onClick={() => setError("")}><X size={15}/></button></div>}
       <div className="se-table-wrap"><table className="se-table"><thead><tr>
         <th>Date & time</th>{isSales ? <><th>Product</th><th>Weight</th><th>Quantity</th><th>Amount paid</th></> : <><th>Category</th><th>Details</th><th>Weight</th><th>Rate</th><th>Total amount</th></>}<th>Action</th>
       </tr></thead><tbody>
-        {loading ? <tr><td className="se-empty" colSpan={isSales ? 6 : 7}><LoaderCircle className="spin" size={22}/> Loading records…</td></tr> : records.length === 0 ? <tr><td className="se-empty" colSpan={isSales ? 6 : 7}><div className="se-empty-icon">{isSales ? <ReceiptText size={24}/> : <Wallet size={24}/>}</div><strong>No records for this period</strong><span>Add your first {isSales ? "sale" : "expense"} to get started.</span></td></tr> : records.map(row => <tr key={row._id}>
+        {loading ? <tr><td className="se-empty" colSpan={isSales ? 6 : 7}><LoaderCircle className="spin" size={22}/> Loading records…</td></tr> : filteredRecords.length === 0 ? <tr><td className="se-empty" colSpan={isSales ? 6 : 7}><div className="se-empty-icon">{isSales ? <ReceiptText size={24}/> : <Wallet size={24}/>}</div><strong>No records for this period</strong><span>Add your first {isSales ? "sale" : "expense"} to get started.</span></td></tr> : filteredRecords.map(row => <tr key={row._id}>
           <td><div className="se-date"><strong>{new Date(row.createdAt).toLocaleDateString("en-IN", {day:"2-digit",month:"short",year:"numeric"})}</strong><span><Clock3 size={12}/> {new Date(row.createdAt).toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit"})}</span></div></td>
           {isSales ? <><td><strong>{row.productName}</strong></td><td>{row.weight != null ? `${number(row.weight)} kg` : "—"}</td><td>{number(row.quantity)} {row.unit === "kg" ? "kg" : "pcs"}</td><td className="se-money">{money(row.amountPaid)}</td></> : <><td><span className={`se-category ${row.category === "Scrape" ? "scrape" : ""}`}>{row.category}</span></td><td><strong>{row.category === "Scrape" ? row.materialName : row.category === "Other" ? row.description : row.category}</strong>{row.category === "Scrape" && <small className="se-subline">Scrap material</small>}</td><td>{row.weight != null ? `${number(row.weight)} kg` : "—"}</td><td>{row.rate != null ? money(row.rate) : "—"}</td><td className="se-money">{money(row.totalAmount)}</td></>}
           <td><button className="se-delete" disabled={deleting === row._id} onClick={() => removeRecord(row)} title="Delete record" aria-label="Delete record">{deleting === row._id ? <LoaderCircle size={16} className="spin"/> : <Trash2 size={16}/>}</button></td>
         </tr>)}
       </tbody></table></div>
-      <div className="se-panel-foot"><span>Showing <strong>{records.length}</strong> record{records.length === 1 ? "" : "s"}</span><span><CheckCircle2 size={14}/> Saved to database</span></div>
+      <div className="se-panel-foot"><span>Showing <strong>{filteredRecords.length}</strong> record{filteredRecords.length === 1 ? "" : "s"}</span><span><CheckCircle2 size={14}/> Saved to database</span></div>
     </section>
 
     {modal && <div className="se-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget && !saving) setModal(false); }}><section className="se-modal" role="dialog" aria-modal="true">

@@ -6,6 +6,7 @@ import {
   ShieldCheck, ArrowUpRight, Menu, ReceiptText, Wallet
 } from "lucide-react";
 import SalesExpenses from "./SalesExpenses.jsx";
+import Dashboard from "./Dashboard.jsx";
 import "./sales-expenses.css";
 
 const API = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
@@ -54,12 +55,10 @@ async function request(path, { token, ...options } = {}) {
 }
 
 export default function App() {
-  const [token, setToken] = useState(
-    () => sessionStorage.getItem("mbb_token") || ""
-  );
-  const [username, setUsername] = useState(
-    () => sessionStorage.getItem("mbb_user") || ""
-  );
+  // Start in staff mode on every app load; admin must sign in when opening an admin section.
+  const [token, setToken] = useState(() => sessionStorage.getItem("mbb_role") ? (sessionStorage.getItem("mbb_token") || "") : "");
+  const [username, setUsername] = useState(() => sessionStorage.getItem("mbb_user") || "");
+  const [role, setRole] = useState(() => sessionStorage.getItem("mbb_role") || "");
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -72,13 +71,19 @@ export default function App() {
   const [deletingId, setDeletingId] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [activePage, setActivePage] = useState("stock");
+  const [loginOpen, setLoginOpen] = useState(() => !(sessionStorage.getItem("mbb_token") && sessionStorage.getItem("mbb_role")));
+  const [requestedPage, setRequestedPage] = useState("stock");
 
   const logout = () => {
     sessionStorage.removeItem("mbb_token");
     sessionStorage.removeItem("mbb_user");
+    sessionStorage.removeItem("mbb_role");
     setToken("");
     setUsername("");
+    setRole("");
     setItems([]);
+    setActivePage("stock");
+    setLoginOpen(true);
   };
 
   useEffect(() => {
@@ -99,8 +104,6 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!token) return;
-
     let active = true;
 
     setLoading(true);
@@ -160,10 +163,33 @@ export default function App() {
 
     sessionStorage.setItem("mbb_token", data.token);
     sessionStorage.setItem("mbb_user", data.username);
+    sessionStorage.setItem("mbb_role", data.role);
 
     setToken(data.token);
     setUsername(data.username);
-    setToast("Welcome back, admin.");
+    setRole(data.role);
+    setActivePage(data.role === "admin" ? requestedPage : "stock");
+    setToast(data.role === "admin" ? "Admin access granted." : "Staff access granted. Stock is read-only.");
+    return data;
+  };
+
+  const navigateTo = page => {
+    setMobileMenu(false);
+    if (["dashboard", "sales", "expenses"].includes(page) && role !== "admin") {
+      setToast("Access denied. Admin login required.");
+      return;
+    }
+    setActivePage(page);
+  };
+
+  const handleLogin = async credentials => {
+    const data = await login(credentials);
+    setActivePage(data.role === "admin" ? requestedPage : "stock");
+    setLoginOpen(false);
+  };
+
+  const cancelAdminLogin = () => {
+    // The app requires a valid staff or admin login before showing stock data.
   };
 
   const openAdd = () => {
@@ -260,8 +286,6 @@ export default function App() {
     }
   };
 
-  if (!token) return <LoginScreen onLogin={login} />;
-
   const totalCost = item =>
     Number(item.quantity) * Number(item.rate);
 
@@ -300,47 +324,48 @@ export default function App() {
         </div>
 
         <div className="shop-label">WORKSPACE</div>
+        {role === "admin" && <button className={`nav-item ${activePage === "dashboard" ? "nav-active" : ""}`} onClick={() => navigateTo("dashboard")}><IndianRupee size={18}/><span>Dashboard</span>{activePage === "dashboard" && <span className="nav-dot" />}</button>}
 
-        <button className={`nav-item ${activePage === "stock" ? "nav-active" : ""}`} onClick={() => { setActivePage("stock"); setMobileMenu(false); }}>
+        <button className={`nav-item ${activePage === "stock" ? "nav-active" : ""}`} onClick={() => navigateTo("stock")}>
           <Boxes size={18} />
           <span>Stock Entry</span>
           {activePage === "stock" && <span className="nav-dot" />}
         </button>
-        <button className={`nav-item ${activePage === "sales" ? "nav-active" : ""}`} onClick={() => { setActivePage("sales"); setMobileMenu(false); }}>
+        {role === "admin" && <button className={`nav-item ${activePage === "sales" ? "nav-active" : ""}`} onClick={() => navigateTo("sales")}>
           <ReceiptText size={18} />
           <span>Sales</span>
           {activePage === "sales" && <span className="nav-dot" />}
-        </button>
-        <button className={`nav-item ${activePage === "expenses" ? "nav-active" : ""}`} onClick={() => { setActivePage("expenses"); setMobileMenu(false); }}>
+        </button>}
+        {role === "admin" && <button className={`nav-item ${activePage === "expenses" ? "nav-active" : ""}`} onClick={() => navigateTo("expenses")}>
           <Wallet size={18} />
           <span>Expenses</span>
           {activePage === "expenses" && <span className="nav-dot" />}
-        </button>
+        </button>}
 
         <div className="sidebar-bottom">
           <div className="secure-note">
             <ShieldCheck size={17} />
-            <span>Private admin workspace</span>
+            <span>{role === "admin" ? "Admin session active" : "Staff: read-only access"}</span>
           </div>
 
           <div className="profile">
             <div className="avatar">
-              {(username || "A").slice(0, 1).toUpperCase()}
+              {(username || "S").slice(0, 1).toUpperCase()}
             </div>
 
             <div className="profile-info">
-              <strong>{username || "Admin"}</strong>
-              <span>Administrator</span>
+              <strong>{username || "Staff"}</strong>
+              <span>{role === "admin" ? "Administrator" : "Read-only staff"}</span>
             </div>
 
-            <button
+            {token && <button
               className="icon-button logout-button"
               onClick={logout}
               aria-label="Log out"
               title="Log out"
             >
               <LogOut size={17} />
-            </button>
+            </button>}
           </div>
         </div>
       </aside>
@@ -366,19 +391,19 @@ export default function App() {
           <div className="breadcrumbs">
             <span>Workspace</span>
             <span className="crumb-slash">/</span>
-            <strong>{activePage === "stock" ? "Stock Entry" : activePage === "sales" ? "Sales" : "Expenses"}</strong>
+            <strong>{activePage === "dashboard" ? "Dashboard" : activePage === "stock" ? "Stock Entry" : activePage === "sales" ? "Sales" : "Expenses"}</strong>
           </div>
 
           <div className="topbar-right">
             <span className="status-dot" />
             <span>System online</span>
             <div className="top-avatar">
-              {(username || "A").slice(0, 1).toUpperCase()}
+              {(username || "S").slice(0, 1).toUpperCase()}
             </div>
           </div>
         </header>
 
-        {activePage === "stock" ? <div className="page-content">
+        {activePage === "dashboard" ? <Dashboard token={token} /> : activePage === "stock" ? <div className="page-content">
           <section className="page-heading">
             <div>
               <div className="eyebrow">
@@ -393,12 +418,12 @@ export default function App() {
               </p>
             </div>
 
-            <button
+            {role === "admin" && <button
               className="primary-button add-top-button"
               onClick={openAdd}
             >
-              <Plus size={18} /> Add new product
-            </button>
+              <Plus size={18} /> Add New Product
+            </button>}
           </section>
 
           <section className="stats-grid">
@@ -426,13 +451,7 @@ export default function App() {
               tone="amber"
             />
 
-            <StatCard
-              icon={<ArrowUpRight size={19} />}
-              label="Potential sales"
-              value={money(stats.potentialSales)}
-              detail="At current selling prices"
-              tone="violet"
-            />
+
           </section>
 
           <section className="inventory-panel">
@@ -473,12 +492,12 @@ export default function App() {
                 <kbd>⌕</kbd>
               </label>
 
-              <button
+              {role === "admin" && <button
                 className="primary-button toolbar-add"
                 onClick={openAdd}
               >
-                <Plus size={17} /> Add product
-              </button>
+                <Plus size={17} /> <span>Add Product</span>
+              </button>}
             </div>
 
             {pageError && (
@@ -499,21 +518,21 @@ export default function App() {
                     <th>TOTAL</th>
                     <th>COST / PIECE</th>
                     <th>SELLING / PIECE</th>
-                    <th className="actions-col">ACTIONS</th>
+                    {role === "admin" && <th className="actions-col">ACTIONS</th>}
                   </tr>
                 </thead>
 
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="8" className="state-cell">
+                      <td colSpan={role === "admin" ? 8 : 7} className="state-cell">
                         <LoaderCircle className="spin" size={22} />
                         Loading inventory...
                       </td>
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="state-cell">
+                      <td colSpan={role === "admin" ? 8 : 7} className="state-cell">
                         <div className="empty-icon">
                           <Boxes size={24} />
                         </div>
@@ -532,10 +551,11 @@ export default function App() {
 
                         {!search && (
                           <button
+                            type="button"
                             className="primary-button empty-add"
                             onClick={openAdd}
                           >
-                            <Plus size={16} /> Add first product
+                            <Plus size={16} /> Add First Product
                           </button>
                         )}
                       </td>
@@ -596,35 +616,35 @@ export default function App() {
                           </span>
                         </td>
 
-                        <td>
+                        {role === "admin" && <td className="actions-cell">
                           <div className="row-actions">
                             <button
+                              type="button"
                               className="action-button edit-action"
                               onClick={() => openEdit(item)}
                               aria-label={`Edit ${item.productName}`}
-                              title="Edit"
+                              title="Edit product"
                             >
-                              <Pencil size={15} />
+                              <Pencil size={14} /> <span>Edit</span>
                             </button>
 
                             <button
+                              type="button"
                               className="action-button delete-action"
                               onClick={() => deleteStock(item)}
                               disabled={deletingId === item._id}
                               aria-label={`Delete ${item.productName}`}
-                              title="Delete"
+                              title="Delete product"
                             >
                               {deletingId === item._id ? (
-                                <LoaderCircle
-                                  size={15}
-                                  className="spin"
-                                />
+                                <LoaderCircle size={14} className="spin" />
                               ) : (
-                                <Trash2 size={15} />
+                                <Trash2 size={14} />
                               )}
+                              <span>{deletingId === item._id ? "Deleting" : "Delete"}</span>
                             </button>
                           </div>
-                        </td>
+                        </td>}
                       </tr>
                     ))
                   )}
@@ -658,6 +678,8 @@ export default function App() {
           </footer>
         </div> : <SalesExpenses mode={activePage} token={token} onToast={setToast} />}
       </main>
+
+      {loginOpen && <LoginScreen onLogin={handleLogin} onCancel={cancelAdminLogin} />}
 
       {modalOpen && (
         <StockModal
@@ -697,7 +719,7 @@ function StatCard({ icon, label, value, detail, tone }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onCancel }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -712,14 +734,14 @@ function LoginScreen({ onLogin }) {
     try {
       await onLogin({ username, password });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Access denied. Invalid username or password.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-screen">
+    <div className="login-screen" style={{ position: "fixed", inset: 0, zIndex: 1000 }}>
       <div className="login-decoration decoration-one" />
       <div className="login-decoration decoration-two" />
 
@@ -737,15 +759,15 @@ function LoginScreen({ onLogin }) {
 
         <div className="login-intro">
           <div className="eyebrow">
-            <span className="eyebrow-line" /> ADMIN PORTAL
+            <span className="eyebrow-line" /> SECURE LOGIN
           </div>
           <h1>Welcome <span>back.</span></h1>
-          <p>Sign in to manage your shop inventory.</p>
+          <p>Sign in to view stock or manage the shop.</p>
         </div>
 
         <form onSubmit={submit} className="login-form">
           <label className="field-label" htmlFor="username">
-            Admin username
+Username
           </label>
 
           <input
@@ -801,7 +823,7 @@ function LoginScreen({ onLogin }) {
               </>
             ) : (
               <>
-                Sign in to dashboard <ArrowUpRight size={18} />
+                Sign in <ArrowUpRight size={18} />
               </>
             )}
           </button>
@@ -809,7 +831,7 @@ function LoginScreen({ onLogin }) {
 
         <div className="login-security">
           <ShieldCheck size={16} />
-          <span>Secure, administrator-only access</span>
+          <span>Staff can view stock only. Admin can manage all sections.</span>
         </div>
       </div>
 
