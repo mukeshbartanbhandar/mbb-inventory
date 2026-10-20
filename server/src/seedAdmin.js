@@ -8,7 +8,7 @@ if (!process.env.MONGO_URI || !process.env.ADMIN_USERNAME || !process.env.ADMIN_
   console.error("Set MONGO_URI, ADMIN_USERNAME and ADMIN_PASSWORD in server/.env");
   process.exit(1);
 }
-if (process.env.ADMIN_PASSWORD.length < 5) {
+if (process.env.ADMIN_PASSWORD.length < 12) {
   console.error("For safety, ADMIN_PASSWORD must be at least 12 characters.");
   process.exit(1);
 }

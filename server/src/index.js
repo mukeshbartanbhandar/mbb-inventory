@@ -114,6 +114,40 @@ stockSchema.index({ productName: "text" });
 const Admin = mongoose.model("Admin", adminSchema);
 const Stock = mongoose.model("Stock", stockSchema);
 
+// -------------------- SALES + EXPENSE SCHEMAS --------------------
+const saleSchema = new mongoose.Schema({
+  productName: { type: String, required: true, trim: true, maxlength: 120 },
+  unit: { type: String, enum: ["pieces", "kg"], default: "pieces" },
+  quantity: { type: Number, required: true, min: 0.001 },
+  weight: { type: Number, min: 0.001, default: undefined },
+  amountPaid: { type: Number, required: true, min: 0 }
+}, { timestamps: true });
+saleSchema.index({ createdAt: -1 });
+
+const expenseSchema = new mongoose.Schema({
+  category: { type: String, enum: ["Shop rent", "Godown rent", "Electricity bill", "Scrape", "Other"], required: true },
+  description: { type: String, trim: true, maxlength: 160, default: "" },
+  materialName: { type: String, trim: true, maxlength: 120, default: "" },
+  weight: { type: Number, min: 0.001, default: undefined },
+  rate: { type: Number, min: 0, default: undefined },
+  amount: { type: Number, min: 0.01, default: undefined },
+  totalAmount: { type: Number, required: true, min: 0 }
+}, { timestamps: true });
+expenseSchema.index({ createdAt: -1 });
+
+const Sale = mongoose.model("Sale", saleSchema);
+const Expense = mongoose.model("Expense", expenseSchema);
+
+function periodFilter(period) {
+  if (period === "15days") return { createdAt: { $gte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) } };
+  if (period === "month") {
+    const start = new Date();
+    start.setDate(1); start.setHours(0, 0, 0, 0);
+    return { createdAt: { $gte: start } };
+  }
+  return {};
+}
+
 // -------------------- AUTHENTICATION --------------------
 
 function auth(req, res, next) {
@@ -412,6 +446,103 @@ app.delete("/api/stock/:id", auth, async (req, res) => {
     res.status(400).json({
       message: "Invalid stock record ID.",
     });
+  }
+});
+
+// -------------------- SALES API --------------------
+app.get("/api/sales", auth, async (req, res) => {
+  try {
+    const rows = await Sale.find(periodFilter(String(req.query.period || "15days"))).sort({ createdAt: -1 }).lean();
+    res.json(rows);
+  } catch (error) {
+    console.error("Sales fetch error:", error);
+    res.status(500).json({ message: "Could not load sales records." });
+  }
+});
+
+app.post("/api/sales", auth, async (req, res) => {
+  try {
+    const productName = String(req.body.productName || "").trim();
+    const unit = req.body.unit === "kg" ? "kg" : "pieces";
+    const quantity = Number(req.body.quantity);
+    const amountPaid = Number(req.body.amountPaid);
+    const weight = req.body.weight === "" || req.body.weight == null ? undefined : Number(req.body.weight);
+    if (!productName) return res.status(400).json({ message: "Product name is required." });
+    if (productName.length > 120) return res.status(400).json({ message: "Product name must be 120 characters or fewer." });
+    if (!Number.isFinite(quantity) || quantity <= 0) return res.status(400).json({ message: "Quantity must be greater than zero." });
+    if (!Number.isFinite(amountPaid) || amountPaid < 0) return res.status(400).json({ message: "Amount paid must be zero or greater." });
+    if (weight !== undefined && (!Number.isFinite(weight) || weight <= 0)) return res.status(400).json({ message: "Weight must be greater than zero when provided." });
+    const sale = await Sale.create({ productName, unit, quantity, amountPaid, ...(weight !== undefined ? { weight } : {}) });
+    res.status(201).json(sale);
+  } catch (error) {
+    console.error("Sale create error:", error);
+    res.status(400).json({ message: error.message || "Could not record sale." });
+  }
+});
+
+app.delete("/api/sales/:id", auth, async (req, res) => {
+  try {
+    const sale = await Sale.findByIdAndDelete(req.params.id);
+    if (!sale) return res.status(404).json({ message: "Sale record not found." });
+    res.json({ message: "Sale record deleted." });
+  } catch {
+    res.status(400).json({ message: "Invalid sale record ID." });
+  }
+});
+
+// -------------------- EXPENSES API --------------------
+app.get("/api/expenses", auth, async (req, res) => {
+  try {
+    const rows = await Expense.find(periodFilter(String(req.query.period || "15days"))).sort({ createdAt: -1 }).lean();
+    res.json(rows);
+  } catch (error) {
+    console.error("Expenses fetch error:", error);
+    res.status(500).json({ message: "Could not load expense records." });
+  }
+});
+
+app.post("/api/expenses", auth, async (req, res) => {
+  try {
+    const allowed = ["Shop rent", "Godown rent", "Electricity bill", "Scrape", "Other"];
+    const category = String(req.body.category || "");
+    if (!allowed.includes(category)) return res.status(400).json({ message: "Choose a valid expense category." });
+    let payload = { category, totalAmount: 0 };
+    if (category === "Scrape") {
+      const materialName = String(req.body.materialName || "").trim();
+      const weight = Number(req.body.weight);
+      const rate = Number(req.body.rate);
+      if (!materialName) return res.status(400).json({ message: "Scrap material name is required." });
+      if (materialName.length > 120) return res.status(400).json({ message: "Material name must be 120 characters or fewer." });
+      if (!Number.isFinite(weight) || weight <= 0) return res.status(400).json({ message: "Scrap weight must be greater than zero." });
+      if (!Number.isFinite(rate) || rate < 0) return res.status(400).json({ message: "Scrap rate must be zero or greater." });
+      payload = { ...payload, materialName, weight, rate, totalAmount: Number((weight * rate).toFixed(2)) };
+    } else {
+      const amount = Number(req.body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: "Expense amount must be greater than zero." });
+      payload.amount = amount;
+      payload.totalAmount = Number(amount.toFixed(2));
+      if (category === "Other") {
+        const description = String(req.body.description || "").trim();
+        if (!description) return res.status(400).json({ message: "Please specify what the other expense was." });
+        if (description.length > 160) return res.status(400).json({ message: "Expense description must be 160 characters or fewer." });
+        payload.description = description;
+      }
+    }
+    const expense = await Expense.create(payload);
+    res.status(201).json(expense);
+  } catch (error) {
+    console.error("Expense create error:", error);
+    res.status(400).json({ message: error.message || "Could not record expense." });
+  }
+});
+
+app.delete("/api/expenses/:id", auth, async (req, res) => {
+  try {
+    const expense = await Expense.findByIdAndDelete(req.params.id);
+    if (!expense) return res.status(404).json({ message: "Expense record not found." });
+    res.json({ message: "Expense record deleted." });
+  } catch {
+    res.status(400).json({ message: "Invalid expense record ID." });
   }
 });
 

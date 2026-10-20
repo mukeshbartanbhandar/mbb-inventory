@@ -3,8 +3,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   CookingPot, Search, Plus, Pencil, Trash2, LogOut, Boxes,
   PackageCheck, IndianRupee, X, Eye, EyeOff, LoaderCircle,
-  ShieldCheck, ArrowUpRight, Menu
+  ShieldCheck, ArrowUpRight, Menu, ReceiptText, Wallet
 } from "lucide-react";
+import SalesExpenses from "./SalesExpenses.jsx";
+import "./sales-expenses.css";
 
 const API = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
 
@@ -69,6 +71,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [activePage, setActivePage] = useState("stock");
 
   const logout = () => {
     sessionStorage.removeItem("mbb_token");
@@ -298,10 +301,20 @@ export default function App() {
 
         <div className="shop-label">WORKSPACE</div>
 
-        <button className="nav-item nav-active">
+        <button className={`nav-item ${activePage === "stock" ? "nav-active" : ""}`} onClick={() => { setActivePage("stock"); setMobileMenu(false); }}>
           <Boxes size={18} />
           <span>Stock Entry</span>
-          <span className="nav-dot" />
+          {activePage === "stock" && <span className="nav-dot" />}
+        </button>
+        <button className={`nav-item ${activePage === "sales" ? "nav-active" : ""}`} onClick={() => { setActivePage("sales"); setMobileMenu(false); }}>
+          <ReceiptText size={18} />
+          <span>Sales</span>
+          {activePage === "sales" && <span className="nav-dot" />}
+        </button>
+        <button className={`nav-item ${activePage === "expenses" ? "nav-active" : ""}`} onClick={() => { setActivePage("expenses"); setMobileMenu(false); }}>
+          <Wallet size={18} />
+          <span>Expenses</span>
+          {activePage === "expenses" && <span className="nav-dot" />}
         </button>
 
         <div className="sidebar-bottom">
@@ -353,7 +366,7 @@ export default function App() {
           <div className="breadcrumbs">
             <span>Workspace</span>
             <span className="crumb-slash">/</span>
-            <strong>Stock Entry</strong>
+            <strong>{activePage === "stock" ? "Stock Entry" : activePage === "sales" ? "Sales" : "Expenses"}</strong>
           </div>
 
           <div className="topbar-right">
@@ -365,7 +378,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="page-content">
+        {activePage === "stock" ? <div className="page-content">
           <section className="page-heading">
             <div>
               <div className="eyebrow">
@@ -643,7 +656,7 @@ export default function App() {
               <span className="footer-heart">♥</span>
             </span>
           </footer>
-        </div>
+        </div> : <SalesExpenses mode={activePage} token={token} onToast={setToast} />}
       </main>
 
       {modalOpen && (
