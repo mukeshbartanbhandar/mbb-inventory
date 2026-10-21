@@ -20,7 +20,7 @@ if (!process.env.MONGO_URI || !JWT_SECRET) {
 
 app.use(cors({
   origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
 }));
 
 app.use(express.json({ limit: "20kb" }));
@@ -101,11 +101,16 @@ const stockSchema = new mongoose.Schema({
     },
   },
 
-  // Selling price of one individual piece.
+  // Selling price per piece for pieces-based products; selling price per kilogram for kg-based products.
   sellingPrice: {
     type: Number,
     required: true,
     min: 0,
+  },
+  sellingPriceBasis: {
+    type: String,
+    enum: ["piece", "kg"],
+    required: false,
   },
 }, { timestamps: true });
 
@@ -137,6 +142,19 @@ expenseSchema.index({ createdAt: -1 });
 
 const Sale = mongoose.model("Sale", saleSchema);
 const Expense = mongoose.model("Expense", expenseSchema);
+
+// -------------------- OUTSTANDING LEDGER --------------------
+const outstandingSchema = new mongoose.Schema({
+  type: { type: String, enum: ["payable", "receivable"], required: true },
+  partyName: { type: String, required: true, trim: true, maxlength: 120 },
+  productName: { type: String, required: true, trim: true, maxlength: 120 },
+  amount: { type: Number, required: true, min: 0.01 },
+  paidAmount: { type: Number, required: true, min: 0, default: 0 },
+  dueDate: { type: String, trim: true, default: "" },
+  notes: { type: String, trim: true, maxlength: 300, default: "" }
+}, { timestamps: true });
+outstandingSchema.index({ type: 1, createdAt: -1 });
+const Outstanding = mongoose.model("Outstanding", outstandingSchema);
 
 function periodFilter(period) {
   if (period === "15days") return { createdAt: { $gte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) } };
@@ -223,7 +241,7 @@ function stockPayload(body) {
     sellingPrice < 0
   ) {
     throw new Error(
-      "Selling price per piece must be zero or greater."
+      "Selling price must be zero or greater."
     );
   }
 
@@ -252,6 +270,7 @@ function stockPayload(body) {
     unit,
     rate,
     sellingPrice,
+    sellingPriceBasis: unit === "kg" ? "kg" : "piece",
   };
 
   if (unit === "kg") {
@@ -314,7 +333,7 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
     // Fixed read-only staff account requested by the shop owner.
     // Staff can view stock, but stock mutations and admin sections are role-protected below.
     let sessionUser;
-    if (username === "member" && password === "member123") {
+    if (username === "member" && password === "staff") {
       sessionUser = { id: "staff-member", username: "member", role: "staff" };
     } else {
       const admin = await Admin.findOne({ username });
@@ -448,6 +467,64 @@ app.delete("/api/stock/:id", auth, adminOnly, async (req, res) => {
 });
 
 
+// -------------------- OUTSTANDING LEDGER API (ADMIN ONLY) --------------------
+app.get("/api/outstanding", auth, adminOnly, async (_req, res) => {
+  try {
+    const rows = await Outstanding.find({}).sort({ createdAt: -1 }).lean();
+    res.json(rows);
+  } catch (error) {
+    console.error("Outstanding fetch error:", error);
+    res.status(500).json({ message: "Could not load outstanding records." });
+  }
+});
+
+app.post("/api/outstanding", auth, adminOnly, async (req, res) => {
+  try {
+    const type = String(req.body.type || "");
+    const partyName = String(req.body.partyName || "").trim();
+    const productName = String(req.body.productName || "").trim();
+    const amount = Number(req.body.amount);
+    const paidAmount = Number(req.body.paidAmount || 0);
+    const dueDate = String(req.body.dueDate || "").trim();
+    const notes = String(req.body.notes || "").trim();
+    if (!["payable", "receivable"].includes(type)) return res.status(400).json({ message: "Choose payable or receivable." });
+    if (!partyName || !productName) return res.status(400).json({ message: "Name and product / goods are required." });
+    if (partyName.length > 120 || productName.length > 120 || notes.length > 300) return res.status(400).json({ message: "One or more fields exceed the allowed length." });
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(paidAmount) || paidAmount < 0 || paidAmount > amount) return res.status(400).json({ message: "Enter a valid total amount and paid amount. Paid amount cannot exceed total." });
+    const row = await Outstanding.create({ type, partyName, productName, amount, paidAmount, dueDate, notes });
+    res.status(201).json(row);
+  } catch (error) {
+    console.error("Outstanding create error:", error);
+    res.status(400).json({ message: error.message || "Could not create outstanding record." });
+  }
+});
+
+app.patch("/api/outstanding/:id/payment", auth, adminOnly, async (req, res) => {
+  try {
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: "Payment amount must be greater than zero." });
+    const row = await Outstanding.findById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Outstanding record not found." });
+    if (row.paidAmount + amount > row.amount + 0.001) return res.status(400).json({ message: "Payment cannot exceed the remaining balance." });
+    row.paidAmount = Math.min(row.amount, Number((row.paidAmount + amount).toFixed(2)));
+    await row.save();
+    res.json(row);
+  } catch (error) {
+    console.error("Outstanding payment error:", error);
+    res.status(400).json({ message: error.name === "CastError" ? "Invalid outstanding record ID." : (error.message || "Could not record payment.") });
+  }
+});
+
+app.delete("/api/outstanding/:id", auth, adminOnly, async (req, res) => {
+  try {
+    const row = await Outstanding.findByIdAndDelete(req.params.id);
+    if (!row) return res.status(404).json({ message: "Outstanding record not found." });
+    res.json({ message: "Outstanding record deleted." });
+  } catch (error) {
+    res.status(400).json({ message: "Invalid outstanding record ID." });
+  }
+});
+
 // -------------------- ADMIN DASHBOARD ANALYTICS --------------------
 app.get("/api/dashboard", auth, adminOnly, async (_req, res) => {
   try {
@@ -472,8 +549,8 @@ app.get("/api/dashboard", auth, adminOnly, async (_req, res) => {
       if (new Date(sale.createdAt) >= today) unitsSoldToday += units;
     }
     const stockCost = stock.reduce((sum,x)=>sum+Number(x.quantity||0)*Number(x.rate||0),0);
-    const stockSelling = stock.reduce((sum,x)=>sum+(x.unit==="kg" ? Number(x.piecesObtained||0) : Number(x.quantity||0))*Number(x.sellingPrice||0),0);
-    const potentialSales = stock.reduce((sum,x)=>sum+(x.unit==="kg" ? Number(x.piecesObtained||0) : Number(x.quantity||0))*Number(x.sellingPrice||0),0);
+    const stockSelling = stock.reduce((sum,x)=>sum+Number(x.quantity||0)*Number(x.sellingPrice||0),0);
+    const potentialSales = stock.reduce((sum,x)=>sum+Number(x.quantity||0)*Number(x.sellingPrice||0),0);
     const slowStock = stock.filter(x => Date.now() - new Date(x.createdAt).getTime() > 90*24*60*60*1000 && Number(x.quantity)>0);
     const scrapTotal = expenses.filter(x=>x.category==="Scrape").reduce((sum,x)=>sum+Number(x.totalAmount||0),0);
     res.json({
@@ -601,8 +678,26 @@ app.use((err, _req, res, _next) => {
 // -------------------- DATABASE + SERVER --------------------
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log("MongoDB connected");
+
+    // One-time compatibility migration: older kg records stored selling price per piece.
+    // Convert those prices to the equivalent per-kg selling price while preserving the same total value.
+    const legacyStock = await Stock.find({ sellingPriceBasis: { $exists: false } });
+    for (const item of legacyStock) {
+      if (item.unit === "kg") {
+        const quantity = Number(item.quantity || 0);
+        const pieces = Number(item.piecesObtained || 0);
+        if (quantity > 0 && pieces > 0) {
+          item.sellingPrice = Number((Number(item.sellingPrice || 0) * pieces / quantity).toFixed(2));
+        }
+        item.sellingPriceBasis = "kg";
+      } else {
+        item.sellingPriceBasis = "piece";
+      }
+      await item.save();
+    }
+    if (legacyStock.length) console.log(`Updated selling price basis for ${legacyStock.length} existing stock records.`);
 
     app.listen(PORT, () => {
       console.log(

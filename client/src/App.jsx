@@ -3,9 +3,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   CookingPot, Search, Plus, Pencil, Trash2, LogOut, Boxes,
   PackageCheck, IndianRupee, X, Eye, EyeOff, LoaderCircle,
-  ShieldCheck, ArrowUpRight, Menu, ReceiptText, Wallet
+  ShieldCheck, ArrowUpRight, Menu, ReceiptText, Wallet, WalletCards
 } from "lucide-react";
 import SalesExpenses from "./SalesExpenses.jsx";
+import Outstanding from "./Outstanding.jsx";
 import Dashboard from "./Dashboard.jsx";
 import "./sales-expenses.css";
 
@@ -147,10 +148,7 @@ export default function App() {
     potentialSales: items.reduce(
       (sum, item) =>
         sum +
-        (item.unit === "kg"
-          ? Number(item.piecesObtained || 0)
-          : Number(item.quantity || 0)) *
-          Number(item.sellingPrice || 0),
+        Number(item.quantity || 0) * Number(item.sellingPrice || 0),
       0
     ),
   }), [items]);
@@ -175,7 +173,7 @@ export default function App() {
 
   const navigateTo = page => {
     setMobileMenu(false);
-    if (["dashboard", "sales", "expenses"].includes(page) && role !== "admin") {
+    if (["dashboard", "sales", "expenses", "outstanding"].includes(page) && role !== "admin") {
       setToast("Access denied. Admin login required.");
       return;
     }
@@ -341,6 +339,11 @@ export default function App() {
           <span>Expenses</span>
           {activePage === "expenses" && <span className="nav-dot" />}
         </button>}
+        {role === "admin" && <button className={`nav-item ${activePage === "outstanding" ? "nav-active" : ""}`} onClick={() => navigateTo("outstanding")}>
+          <WalletCards size={18} />
+          <span>Outstanding</span>
+          {activePage === "outstanding" && <span className="nav-dot" />}
+        </button>}
 
         <div className="sidebar-bottom">
           <div className="secure-note">
@@ -391,7 +394,7 @@ export default function App() {
           <div className="breadcrumbs">
             <span>Workspace</span>
             <span className="crumb-slash">/</span>
-            <strong>{activePage === "dashboard" ? "Dashboard" : activePage === "stock" ? "Stock Entry" : activePage === "sales" ? "Sales" : "Expenses"}</strong>
+            <strong>{activePage === "dashboard" ? "Dashboard" : activePage === "stock" ? "Stock Entry" : activePage === "sales" ? "Sales" : activePage === "expenses" ? "Expenses" : "Outstanding"}</strong>
           </div>
 
           <div className="topbar-right">
@@ -403,7 +406,7 @@ export default function App() {
           </div>
         </header>
 
-        {activePage === "dashboard" ? <Dashboard token={token} /> : activePage === "stock" ? <div className="page-content">
+        {activePage === "dashboard" ? <Dashboard token={token} /> : activePage === "outstanding" ? <Outstanding token={token} onToast={setToast} /> : activePage === "stock" ? <div className="page-content">
           <section className="page-heading">
             <div>
               <div className="eyebrow">
@@ -517,7 +520,7 @@ export default function App() {
                     <th>RATE</th>
                     <th>TOTAL</th>
                     <th>COST / PIECE</th>
-                    <th>SELLING / PIECE</th>
+                    <th>SELLING PRICE</th>
                     {role === "admin" && <th className="actions-col">ACTIONS</th>}
                   </tr>
                 </thead>
@@ -614,6 +617,7 @@ export default function App() {
                           <span className="selling-price">
                             {money(item.sellingPrice)}
                           </span>
+                          <div><small>{item.unit === "kg" ? "per kg" : "per piece"}</small></div>
                         </td>
 
                         {role === "admin" && <td className="actions-cell">
@@ -1023,7 +1027,7 @@ function StockModal({
 
             <div className="form-field">
               <label className="field-label" htmlFor="sellingPrice">
-                Selling price / piece <span>*</span>
+                {form.unit === "kg" ? "Selling price per kg" : "Selling price per piece"} <span>*</span>
               </label>
 
               <div className="input-with-prefix">
@@ -1041,7 +1045,7 @@ function StockModal({
                 />
               </div>
 
-              <small>Price at which one piece will be sold</small>
+              <small>{form.unit === "kg" ? "Price at which one kilogram will be sold" : "Price at which one piece will be sold"}</small>
             </div>
           </div>
 
@@ -1062,14 +1066,14 @@ function StockModal({
               <div>
                 <span>Estimated selling value</span>
                 <strong>
-                  {money(piecesObtained * Number(form.sellingPrice || 0))}
+                  {money(quantity * Number(form.sellingPrice || 0))}
                 </strong>
               </div>
             )}
 
             <span className="calc-note">
               {form.unit === "kg"
-                ? "Total purchase value is divided by pieces obtained to calculate the cost per piece."
+                ? "Purchase cost per piece is calculated using pieces obtained. Selling price is entered per kilogram."
                 : "Total purchase value and cost per piece are calculated automatically."}
             </span>
           </div>

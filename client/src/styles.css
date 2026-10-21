@@ -170,3 +170,52 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 @media(max-width:760px){.sidebar{transform:translateX(-100%);transition:transform .22s ease;width:270px;box-shadow:none}.sidebar.sidebar-open{transform:translateX(0);box-shadow:12px 0 45px #102b2030}.sidebar-close{display:grid;margin-left:auto}.mobile-backdrop{display:block;position:fixed;inset:0;z-index:15;border:0;background:#10251d75}.main-area{margin-left:0}.topbar{height:62px;padding:0 17px;gap:10px}.mobile-menu-button{display:grid;color:#4b6657;margin-left:-7px}.breadcrumbs{font-size:11px;gap:8px;margin-right:auto}.topbar-right{font-size:0;gap:0}.topbar-right .status-dot{margin-right:8px}.top-avatar{margin-left:0;width:30px;height:30px}.page-content{padding:25px 16px 18px}.page-heading{align-items:flex-start;margin-bottom:22px;gap:12px}.page-heading h1{font-size:31px}.page-heading p{max-width:330px;font-size:11px}.add-top-button{display:none}.stats-grid{gap:10px;margin-bottom:17px}.stat-card{padding:14px;border-radius:11px}.stat-icon{width:32px;height:32px;margin-bottom:12px}.stat-label{font-size:10px}.stat-value{font-size:clamp(16px,4.5vw,21px)}.stat-detail{font-size:9px;line-height:1.4}.inventory-panel{border-radius:11px}.panel-heading{padding:18px 16px 14px}.panel-heading h2{font-size:15px}.panel-heading p{font-size:10px}.record-count{font-size:9px;padding:6px 8px}.toolbar{padding:0 16px 15px;gap:8px}.search-box{height:40px;gap:7px;padding:0 10px}.search-box input{font-size:10px}.search-box kbd{display:none}.toolbar-add{padding:10px 12px;font-size:11px;gap:6px;width:auto;height:40px;flex-shrink:0}.toolbar-add svg{width:17px;height:17px}.stock-table{min-width:880px}.stock-table th{font-size:8px}.panel-footer{padding:13px 16px;font-size:9px}.panel-footer>span:last-child{font-size:0}.panel-footer>span:last-child .footer-dot{width:7px;height:7px}.page-footer{font-size:9px;line-height:1.5}.login-card{padding:30px 25px 24px}.login-brand{margin-bottom:35px}.login-bottom{font-size:9px}.stock-modal{padding:23px 19px}.modal-header h2{font-size:20px}}
 @media(max-width:420px){.page-content{padding-left:11px;padding-right:11px}.page-heading h1{font-size:28px}.page-heading p{font-size:10px}.stats-grid{gap:8px}.stat-card{padding:12px}.stat-value{font-size:16px}.stat-detail{font-size:8px}.panel-heading{padding-left:12px;padding-right:12px}.panel-heading p{max-width:180px;line-height:1.5}.toolbar{padding-left:12px;padding-right:12px}.search-box input::placeholder{font-size:9px}.record-count{gap:5px}.form-grid{grid-template-columns:1fr;gap:13px}.full-field{grid-column:auto}.calculation-preview{padding:12px}.calculation-preview>div strong{font-size:15px}.stock-modal{padding:20px 16px}.modal-actions .primary-button,.modal-actions .secondary-button{min-width:0;flex:1;padding:11px 8px}.page-footer{flex-direction:column;gap:5px}.login-card{padding:27px 21px 22px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* Outstanding ledger */
+.outstanding-page .page-heading{align-items:center}
+.outstanding-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.outstanding-switch button{display:flex;align-items:center;gap:10px;text-align:left;padding:15px 17px;border:1px solid #e4ebe6;border-radius:12px;background:#fff;color:#52665a;font:600 12px 'Manrope',sans-serif;cursor:pointer}
+.outstanding-switch button.active{border-color:#74a58a;background:#f0f7f2;color:#285d43;box-shadow:0 4px 15px #1f5c3a0b}
+.outstanding-switch button small{margin-left:auto;color:#8b9a90;font-size:10px;font-weight:500}
+.outstanding-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.outstanding-summary>div{display:flex;flex-direction:column;gap:8px;padding:17px 18px;border:1px solid #e8eee9;border-radius:12px;background:#fff}
+.outstanding-summary span,.outstanding-money-row span{color:#829187;font-size:10px}
+.outstanding-summary strong{color:#234e39;font:700 21px 'Manrope',sans-serif;overflow-wrap:anywhere}
+.outstanding-form,.outstanding-list{padding:20px;border:1px solid #e6ede8;border-radius:14px;background:#fff;margin-bottom:20px}
+.outstanding-form-title,.outstanding-list-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:18px}
+.outstanding-form-title h2,.outstanding-list-heading h2{margin:0 0 5px;color:#263f31;font:700 16px 'Manrope',sans-serif}
+.outstanding-form-title p,.outstanding-list-heading p{margin:0;color:#8b998f;font-size:11px;line-height:1.5}
+.outstanding-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.outstanding-fields label,.outstanding-payment label{display:flex;flex-direction:column;gap:7px;color:#52665a;font-size:11px;font-weight:600}
+.outstanding-fields input,.outstanding-payment input{width:100%;min-width:0;padding:11px 12px;border:1px solid #e0e8e2;border-radius:8px;background:#fcfdfc;color:#253e30;font:500 12px 'Manrope',sans-serif;outline:none}
+.outstanding-fields input:focus,.outstanding-payment input:focus{border-color:#6e9e80;box-shadow:0 0 0 3px #6e9e801c}
+.outstanding-fields .wide{grid-column:1/-1}
+.outstanding-form-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:15px;border-top:1px solid #edf1ee;color:#718278;font-size:11px}
+.outstanding-form-footer strong{color:#285d43}
+.outstanding-error{margin:0 0 16px;padding:11px 13px;border:1px solid #f0d2ce;border-radius:8px;background:#fff6f4;color:#a33d31;font-size:11px}
+.outstanding-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.outstanding-card{min-width:0;padding:16px;border:1px solid #e8eee9;border-radius:12px;background:#fff}
+.outstanding-card-top{display:flex;justify-content:space-between;gap:12px}
+.outstanding-kind{color:#84958a;font-size:9px;font-weight:700;letter-spacing:.09em}
+.outstanding-card h3{margin:7px 0 4px;color:#263f31;font:700 15px 'Manrope',sans-serif;overflow-wrap:anywhere}
+.outstanding-card p{margin:0;color:#7c8d82;font-size:11px;overflow-wrap:anywhere}
+.outstanding-money-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:18px}
+.outstanding-money-row>div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.outstanding-money-row strong{color:#354c3d;font-size:12px;overflow-wrap:anywhere}
+.outstanding-money-row .due-balance{color:#b05b35}.outstanding-money-row .paid-balance{color:#2b8053}
+.outstanding-progress{height:5px;margin-top:14px;border-radius:10px;background:#edf2ee;overflow:hidden}
+.outstanding-progress span{display:block;height:100%;border-radius:10px;background:#5c9a74;transition:width .2s ease}
+.outstanding-meta{display:flex;flex-wrap:wrap;gap:8px 13px;margin-top:12px;color:#829187;font-size:10px;line-height:1.5}
+.outstanding-meta span{display:inline-flex;align-items:center;gap:5px;overflow-wrap:anywhere}
+.outstanding-meta .paid-label{color:#2c8556;font-weight:600}
+.outstanding-payment{display:flex;align-items:flex-end;gap:9px;margin-top:16px;padding-top:13px;border-top:1px solid #edf1ee}
+.outstanding-payment label{flex:1;min-width:0}
+.outstanding-payment label>div{position:relative}
+.outstanding-payment label>div>span{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:11px;color:#718278}
+.outstanding-payment input{padding-left:23px}
+.outstanding-payment .secondary-button{white-space:nowrap;min-height:38px}
+.outstanding-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:36px 12px;color:#8b998f;text-align:center;font-size:11px}
+.outstanding-empty strong{color:#52665a;font-size:13px}
+@media(max-width:760px){.outstanding-page .page-heading{align-items:flex-start;flex-direction:column}.outstanding-page .page-heading>.primary-button{align-self:flex-start}.outstanding-form,.outstanding-list{padding:15px}.outstanding-cards{grid-template-columns:1fr}.outstanding-summary{gap:8px}.outstanding-summary>div{padding:12px 10px}.outstanding-summary strong{font-size:16px}.outstanding-switch{gap:7px}.outstanding-switch button{padding:12px 10px;gap:6px;font-size:10px;flex-wrap:wrap}.outstanding-switch button small{margin-left:0}.outstanding-fields{grid-template-columns:1fr}.outstanding-fields .wide{grid-column:auto}.outstanding-form-title{flex-direction:column}.outstanding-payment{align-items:stretch}.outstanding-payment .secondary-button{font-size:10px;padding:9px}}
+@media(max-width:420px){.outstanding-summary span{font-size:9px}.outstanding-summary strong{font-size:14px}.outstanding-switch button svg{width:15px}.outstanding-money-row strong{font-size:11px}.outstanding-form-footer{align-items:flex-start;flex-direction:column}}
