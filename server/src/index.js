@@ -333,7 +333,7 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
     // Fixed read-only staff account requested by the shop owner.
     // Staff can view stock, but stock mutations and admin sections are role-protected below.
     let sessionUser;
-    if (username === "member" && password === "member1") {
+    if (username === "member" && password === "member123") {
       sessionUser = { id: "staff-member", username: "member", role: "staff" };
     } else {
       const admin = await Admin.findOne({ username });
